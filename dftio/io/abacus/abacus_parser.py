@@ -85,6 +85,32 @@ class AbacusParser(Parser):
             out_dirs.sort(key=os.path.getmtime, reverse=True)
             return out_dirs[0]
 
+    def _get_input_file(self, idx, prefer_output_dir=False):
+        """
+        Resolve the ABACUS input file path.
+
+        Supports both legacy `INPUT` and newer `INPUT.info` names while
+        preserving the original lookup order for each caller.
+        """
+        candidate_dirs = []
+        if prefer_output_dir:
+            candidate_dirs.append(self._get_output_dir(idx))
+            candidate_dirs.append(self.raw_datas[idx])
+        else:
+            candidate_dirs.append(self.raw_datas[idx])
+            candidate_dirs.append(self._get_output_dir(idx))
+
+        for candidate_dir in candidate_dirs:
+            for filename in ("INPUT", "INPUT.info"):
+                input_path = os.path.join(candidate_dir, filename)
+                if os.path.exists(input_path):
+                    return input_path
+
+        raise FileNotFoundError(
+            f"No ABACUS input file found for {self.raw_datas[idx]}. "
+            f"Looked for INPUT and INPUT.info in {candidate_dirs}."
+        )
+
     # essential
     def get_structure(self, idx):
         sys = self.raw_sys[idx]
@@ -99,24 +125,88 @@ class AbacusParser(Parser):
         return structure
     
     def get_mode(self, idx):
-        with open(os.path.join(self._get_output_dir(idx), "INPUT"), 'r') as f:
+        with open(self._get_input_file(idx, prefer_output_dir=True), 'r') as f:
             line = find_target_line(f, "calculation")
             assert line is not None, 'Cannot find "MODE" in log file'
             mode = line.split()[1]
             f.close()
 
         return mode
+
+    def _parse_atom_label_line(self, line, logfile):
+        lower_line = line.lower()
+        assert "atom label =" in lower_line, 'Cannot find "atom label =" in log file'
+        atom_label = line.split()[-1]
+        atom_label = ''.join(re.findall(r'[A-Za-z]', atom_label))
+        assert atom_label in ase.data.atomic_numbers, f"Atom label {atom_label} should be in periodic table ({logfile})"
+        return atom_label
+
+    def _parse_coordinate_atom_label(self, token, logfile):
+        if "tau" in token.lower():
+            atom_label = ''.join(re.findall(r'[A-Za-z]', token[5:]))
+        else:
+            atom_label = ''.join(re.findall(r'[A-Za-z]', token))
+        assert atom_label in ase.data.atomic_numbers, f"Atom label {atom_label} should be in periodic table ({logfile})"
+        return atom_label
+
+    def _resolve_matrix_path(self, output_dir, *candidates):
+        for candidate in candidates:
+            matrix_path = os.path.join(output_dir, candidate)
+            if os.path.exists(matrix_path):
+                return matrix_path
+        raise FileNotFoundError(
+            f"No ABACUS matrix file found in {output_dir}. Tried: {candidates}"
+        )
+
+    def _resolve_output_file(self, output_dir, *candidates):
+        for candidate in candidates:
+            file_path = os.path.join(output_dir, candidate)
+            if os.path.exists(file_path):
+                return file_path
+        raise FileNotFoundError(
+            f"No ABACUS output file found in {output_dir}. Tried: {candidates}"
+        )
+
+    @staticmethod
+    def _is_matrix_block_header(line):
+        parts = line.split()
+        if len(parts) != 4:
+            return False
+        try:
+            [int(part) for part in parts]
+        except ValueError:
+            return False
+        return True
+
+    @staticmethod
+    def _read_numeric_block(file_obj, count):
+        tokens = []
+        while len(tokens) < count:
+            line = file_obj.readline()
+            if not line:
+                break
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            tokens.extend(stripped.split())
+        if len(tokens) != count:
+            raise ValueError(f"Expected {count} numeric entries, got {len(tokens)}")
+        return tokens
     
     # essential
     def get_eigenvalue(self, idx, band_index_min=0):
         mode = self.get_mode(idx)
         if mode in ["scf", "nscf"]:
             output_dir = self._get_output_dir(idx)
-            assert os.path.exists(os.path.join(output_dir, "BANDS_1.dat"))
-            eigs = np.loadtxt(os.path.join(output_dir, "BANDS_1.dat"))[np.newaxis, :, 2+band_index_min:]
-            assert os.path.exists(os.path.join(output_dir, "kpoints"))
+            eig_path = self._resolve_output_file(output_dir, "BANDS_1.dat", "band.txt")
+            if os.path.basename(eig_path) == "BANDS_1.dat":
+                eigs = np.loadtxt(eig_path)[np.newaxis, :, 2 + band_index_min:]
+            else:
+                eigs = np.loadtxt(eig_path)[np.newaxis, :, 1 + band_index_min:]
+
+            kpoint_path = self._resolve_output_file(output_dir, "kpoints", "KPT.info")
             kpts = []
-            with open(os.path.join(output_dir, "kpoints"), "r") as f:
+            with open(kpoint_path, "r") as f:
                 line = find_target_line(f, "nkstot now")
                 nkstot = line.strip().split()[-1]
                 line = find_target_line(f, "KPOINTS ")
@@ -156,10 +246,7 @@ class AbacusParser(Parser):
                     raise Exception(f"Cannot find ATOM {index_type} in {logfile}")
 
                 line = f.readline()
-                assert "atom label =" in line
-                atom_label = line.split()[-1]
-                atom_label = ''.join(re.findall(r'[A-Za-z]', atom_label))
-                assert atom_label in ase.data.atomic_numbers, "Atom label should be in periodic table"
+                atom_label = self._parse_atom_label_line(line, logfile)
 
                 current_orbital_types = []
                 while True:
@@ -205,10 +292,7 @@ class AbacusParser(Parser):
                     raise Exception(f"Cannot find ATOM {index_type} in {logfile}")
 
                 line = f.readline()
-                assert "atom label =" in line
-                atom_label = line.split()[-1]
-                atom_label = ''.join(re.findall(r'[A-Za-z]', atom_label))
-                assert atom_label in ase.data.atomic_numbers, "Atom label should be in periodic table"
+                atom_label = self._parse_atom_label_line(line, logfile)
                 atom_type = ase.data.atomic_numbers[atom_label]
 
                 current_site_norbits = 0
@@ -234,9 +318,7 @@ class AbacusParser(Parser):
             for index_site in range(nsites):
                 line = f.readline()
                 tmp = line.split()
-                assert "tau" in tmp[0]
-                atom_label = ''.join(re.findall(r'[A-Za-z]', tmp[0][5:]))
-                assert atom_label in ase.data.atomic_numbers, "Atom label should be in periodic table"
+                atom_label = self._parse_coordinate_atom_label(tmp[0], logfile)
                 element[index_site] = ase.data.atomic_numbers[atom_label]
                 site_norbits[index_site] = site_norbits_dict[element[index_site]]
 
@@ -247,9 +329,10 @@ class AbacusParser(Parser):
                 if line is None:
                     line = find_target_line(f, "NSPIN")
                 assert line is not None, 'Cannot find "NSPIN" in log file'
-                if "NSPIN == 1" or "npin = 1" in line:
+                lower_line = line.lower()
+                if "nspin == 1" in lower_line or "nspin = 1" in lower_line:
                     spinful = False
-                elif "NSPIN == 4" or "nspin = 4" in line:
+                elif "nspin == 4" in lower_line or "nspin = 4" in lower_line:
                     spinful = True
                 else:
                     raise ValueError(f'{line} is not supported')
@@ -257,7 +340,7 @@ class AbacusParser(Parser):
         if mode in ["scf", "nscf"]:
             if hamiltonian:
                 hamiltonian_dict, tmp = self.parse_matrix(
-                    matrix_path=os.path.join(output_dir, "data-HR-sparse_SPIN0.csr"), 
+                    matrix_path=self._resolve_matrix_path(output_dir, "data-HR-sparse_SPIN0.csr", "hrs1_nao.csr"), 
                     nsites=nsites,
                     site_norbits=site_norbits,
                     orbital_types_dict=orbital_types_dict,
@@ -270,7 +353,7 @@ class AbacusParser(Parser):
             
             if overlap:
                 overlap_dict, tmp = self.parse_matrix(
-                    matrix_path=os.path.join(output_dir, "data-SR-sparse_SPIN0.csr"), 
+                    matrix_path=self._resolve_matrix_path(output_dir, "data-SR-sparse_SPIN0.csr", "srs1_nao.csr"), 
                     nsites=nsites,
                     site_norbits=site_norbits,
                     orbital_types_dict=orbital_types_dict,
@@ -290,7 +373,7 @@ class AbacusParser(Parser):
 
             if density_matrix:
                 density_matrix_dict, tmp = self.parse_matrix(
-                    matrix_path=os.path.join(output_dir, "data-DMR-sparse_SPIN0.csr"), 
+                    matrix_path=self._resolve_matrix_path(output_dir, "data-DMR-sparse_SPIN0.csr", "dmrs1_nao.csr"), 
                     nsites=nsites,
                     site_norbits=site_norbits,
                     orbital_types_dict=orbital_types_dict,
@@ -308,7 +391,7 @@ class AbacusParser(Parser):
                 for i in range(sys.get_nframes()):
                     if os.path.exists(os.path.join(output_dir, "matrix/")):
                         hamil, tmp = self.parse_matrix(
-                            matrix_path=os.path.join(output_dir, "matrix/"+str(i)+"_data-HR-sparse_SPIN0.csr"), 
+                            matrix_path=self._resolve_matrix_path(output_dir, "matrix/"+str(i)+"_data-HR-sparse_SPIN0.csr"), 
                             nsites=nsites,
                             site_norbits=site_norbits,
                             orbital_types_dict=orbital_types_dict,
@@ -318,7 +401,7 @@ class AbacusParser(Parser):
                             )
                     else:
                         hamil, tmp = self.parse_matrix(
-                            matrix_path=os.path.join(output_dir, "data-HR-sparse_SPIN0.csr"), 
+                            matrix_path=self._resolve_matrix_path(output_dir, "data-HR-sparse_SPIN0.csr", "hrs1_nao.csr"), 
                             nsites=nsites,
                             site_norbits=site_norbits,
                             orbital_types_dict=orbital_types_dict,
@@ -335,7 +418,7 @@ class AbacusParser(Parser):
                 for i in range(sys.get_nframes()):
                     if os.path.exists(os.path.join(output_dir, "matrix/")):
                         ovp, tmp = self.parse_matrix(
-                            matrix_path=os.path.join(output_dir, "matrix/"+str(i)+"_data-SR-sparse_SPIN0.csr"), 
+                            matrix_path=self._resolve_matrix_path(output_dir, "matrix/"+str(i)+"_data-SR-sparse_SPIN0.csr"), 
                             nsites=nsites,
                             site_norbits=site_norbits,
                             orbital_types_dict=orbital_types_dict,
@@ -345,7 +428,7 @@ class AbacusParser(Parser):
                             )
                     else:
                         ovp, tmp = self.parse_matrix(
-                            matrix_path=os.path.join(output_dir, "data-SR-sparse_SPIN0.csr"), 
+                            matrix_path=self._resolve_matrix_path(output_dir, "data-SR-sparse_SPIN0.csr", "srs1_nao.csr"), 
                             nsites=nsites,
                             site_norbits=site_norbits,
                             orbital_types_dict=orbital_types_dict,
@@ -369,7 +452,7 @@ class AbacusParser(Parser):
                 for i in range(sys.get_nframes()):
                     if os.path.exists(os.path.join(output_dir, "matrix/")):
                         dm, tmp = self.parse_matrix(
-                            matrix_path=os.path.join(output_dir, "matrix/"+str(i)+"_data-DMR-sparse_SPIN0.csr"), 
+                            matrix_path=self._resolve_matrix_path(output_dir, "matrix/"+str(i)+"_data-DMR-sparse_SPIN0.csr"), 
                             nsites=nsites,
                             site_norbits=site_norbits,
                             orbital_types_dict=orbital_types_dict,
@@ -379,7 +462,7 @@ class AbacusParser(Parser):
                             )
                     else:
                         dm, tmp = self.parse_matrix(
-                            matrix_path=os.path.join(output_dir, "data-DMR-sparse_SPIN0.csr"), 
+                            matrix_path=self._resolve_matrix_path(output_dir, "data-DMR-sparse_SPIN0.csr", "dmrs1_nao.csr"), 
                             nsites=nsites,
                             site_norbits=site_norbits,
                             orbital_types_dict=orbital_types_dict,
@@ -401,36 +484,50 @@ class AbacusParser(Parser):
         norbits = int(np.sum(site_norbits))
         matrix_dict = dict()
         with open(matrix_path, 'r') as f:
-            line = f.readline() # read "Matrix Dimension of ..."
-            if not "Matrix Dimension of" in line:
-                """In this case, the starting of the file is STEP 0"""
-                # find the correct step
+            line = f.readline()
+            first_matrix_line = None
+
+            if "Matrix Dimension of" in line:
+                assert step == 0
+                f.readline() # read "Matrix number of ..."
+                norbits = int(line.split()[-1])
+            elif "STEP" in line:
+                # ABACUS >= 3.0 sparse matrix format
                 step_found = False
                 while line and not step_found:
                     if "STEP" in line:
                         stp = int(line.split()[-1])
-                        if stp != step:
-                            line = f.readline()
-                        else:
+                        if stp == step:
                             step_found = True
+                        else:
+                            line = f.readline()
                     else:
                         line = f.readline()
-                line = f.readline() # ABACUS >= 3.0
+                line = f.readline()
                 assert "Matrix Dimension of" in line
+                f.readline() # read "Matrix number of ..."
+                norbits = int(line.split()[-1])
             else:
-                assert step == 0
-            f.readline() # read "Matrix number of ..."
-            norbits = int(line.split()[-1])
-            for line in f:
+                # Newer density-matrix files contain a descriptive header before CSR data.
+                while line:
+                    if "# number of localized basis" in line:
+                        norbits = int(line.split()[0])
+                    if self._is_matrix_block_header(line):
+                        first_matrix_line = line
+                        break
+                    line = f.readline()
+
+            line = first_matrix_line if first_matrix_line else f.readline()
+            while line:
                 line1 = line.split()
                 if len(line1) == 0 or len(line1) == 2:
                     break
                 num_element = int(line1[3])
                 if num_element != 0:
                     R_cur = np.array(line1[:3]).astype(int)
-                    line2 = f.readline().split()
-                    line3 = f.readline().split()
-                    line4 = f.readline().split()
+                    line2 = self._read_numeric_block(f, num_element)
+                    line3 = self._read_numeric_block(f, num_element)
+                    line4 = self._read_numeric_block(f, norbits + 1)
                     if not spinful:
                         hamiltonian_cur = csr_matrix((np.array(line2).astype(np.float32), np.array(line3).astype(int),
                                                         np.array(line4).astype(np.int32)), shape=(norbits, norbits), dtype=np.float32).toarray()
@@ -461,6 +558,7 @@ class AbacusParser(Parser):
                                 mat = self.transform(mat, orbital_types_dict[element[index_site_i]] * 2,
                                                         orbital_types_dict[element[index_site_j]] * 2)
                             matrix_dict[key_str] = mat * factor
+                line = f.readline()
         return matrix_dict, norbits
     
     def transform(self, mat, l_lefts, l_rights):
@@ -610,13 +708,12 @@ class AbacusParser(Parser):
         # Get dump frequency for MD mode
         dump_freq = 1
         if mode == "md":
-            input_path = os.path.join(self.raw_datas[idx], "INPUT")
-            if os.path.exists(input_path):
-                with open(input_path, 'r') as f:
-                    for line in f:
-                        if len(line) > 0 and "md_dumpfreq" in line and "md_dumpfreq" == line.split()[0]:
-                            dump_freq = int(line.split()[1])
-                            break
+            input_path = self._get_input_file(idx)
+            with open(input_path, 'r') as f:
+                for line in f:
+                    if len(line) > 0 and "md_dumpfreq" in line and "md_dumpfreq" == line.split()[0]:
+                        dump_freq = int(line.split()[1])
+                        break
 
         # Extract energy
         result = self._extract_energy_from_log(loglines, mode, dump_freq)

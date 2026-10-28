@@ -4,6 +4,7 @@ from dftio.io.gaussian.gaussian_parser import GaussianParser
 from dftio.io.siesta.siesta_parser import SiestaParser
 from dftio.io.vasp.vasp_parser import VASPParser
 from dftio.io.pyatb.pyatb_parser import PyatbParser
+from dftio.io.openmx.openmx_parser import OpenmxParser
 
 
 __all__ = [
@@ -12,5 +13,6 @@ __all__ = [
     "GaussianParser",
     "SiestaParser",
     "VASPParser",
-    "PyatbParser"
+    "PyatbParser",
+    "OpenmxParser"
 ]

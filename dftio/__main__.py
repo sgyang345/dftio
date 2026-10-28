@@ -77,7 +77,7 @@ def main_parser() -> argparse.ArgumentParser:
         "--mode",
         type=str,
         default="abacus",
-        help="The name of the DFT software, currently support abacus/rescu/siesta/gaussian/pyatb",
+        help="The name of the DFT software, currently support abacus/rescu/siesta/gaussian/pyatb/openmx",
     )
 
     parser_parse.add_argument(
