@@ -1,4 +1,6 @@
 import os
+import h5py
+import numpy as np
 import pytest
 import shutil
 from dftio.io.abacus.abacus_parser import AbacusParser
@@ -42,6 +44,15 @@ def abacus_parser(tmp_path):
     return AbacusParser(
         root=str(tmp_path),
         prefix='calculation'
+    )
+
+
+@pytest.fixture
+def abacus_gets_parser():
+    """Parser backed by a real ABACUS get_S calculation."""
+    return AbacusParser(
+        root="test/data",
+        prefix="abacus_gets",
     )
 
 def test_abacus_parser_init(abacus_parser, tmp_path):
@@ -105,3 +116,83 @@ def test_get_blocks(abacus_parser):
     assert isinstance(ovp, list)
     assert len(ovp) > 0
     assert isinstance(ovp[0], dict)
+
+
+def test_abacus_gets_structure_and_basis(abacus_gets_parser):
+    assert abacus_gets_parser.get_mode(0) == "get_S"
+
+    structure = abacus_gets_parser.get_structure(0)
+    assert structure[_keys.ATOMIC_NUMBERS_KEY].tolist() == [13]
+    assert structure[_keys.POSITIONS_KEY].shape == (1, 1, 3)
+    assert structure[_keys.CELL_KEY].shape == (1, 3, 3)
+    assert abacus_gets_parser.get_basis(0) == {"Al": "4s4p1d"}
+
+
+def test_abacus_gets_overlap_blocks(abacus_gets_parser):
+    ham, ovp, dm = abacus_gets_parser.get_blocks(
+        0,
+        hamiltonian=False,
+        overlap=True,
+        density_matrix=False,
+    )
+
+    assert ham is None
+    assert dm is None
+    assert isinstance(ovp, list) and len(ovp) == 1
+
+    blocks = ovp[0]
+    assert len(blocks) == 13
+    onsite = blocks["0_0_0_0_0"]
+    assert onsite.shape == (21, 21)
+    assert onsite.dtype == np.float32
+    assert np.allclose(np.diag(onsite), 1.0)
+    assert np.allclose(
+        blocks["0_0_-1_0_0"],
+        blocks["0_0_1_0_0"].T,
+    )
+
+
+@pytest.mark.parametrize(
+    ("hamiltonian", "density_matrix", "requested"),
+    [
+        (True, False, "Hamiltonian"),
+        (False, True, "density matrix"),
+    ],
+)
+def test_abacus_gets_rejects_unavailable_matrices(
+    abacus_gets_parser,
+    hamiltonian,
+    density_matrix,
+    requested,
+):
+    with pytest.raises(ValueError, match=requested):
+        abacus_gets_parser.get_blocks(
+            0,
+            hamiltonian=hamiltonian,
+            overlap=True,
+            density_matrix=density_matrix,
+        )
+
+
+def test_abacus_gets_writes_overlaps_h5(abacus_gets_parser, tmp_path):
+    abacus_gets_parser.write(
+        idx=0,
+        outroot=tmp_path,
+        format="dat",
+        eigenvalue=False,
+        hamiltonian=False,
+        overlap=True,
+        density_matrix=False,
+        band_index_min=0,
+    )
+
+    output_dir = tmp_path / "Al.0"
+    assert (output_dir / "basis.dat").exists()
+    assert (output_dir / "info.json").exists()
+
+    with h5py.File(output_dir / "overlaps.h5", "r") as overlap_file:
+        assert list(overlap_file.keys()) == ["0"]
+        assert len(overlap_file["0"]) == 13
+        onsite = overlap_file["0"]["0_0_0_0_0"][:]
+        assert onsite.shape == (21, 21)
+        assert np.allclose(np.diag(onsite), 1.0)

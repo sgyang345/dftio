@@ -30,11 +30,26 @@ class AbacusParser(Parser):
             **kwargs
             ):
         super(AbacusParser, self).__init__(root, prefix)
-        mode = self.get_mode(idx=0)
-        if mode in ['nscf', "scf"]:
-            self.raw_sys = [dpdata.System(read(os.path.join(self._get_output_dir(idx), "STRU.cif")), fmt="ase/structure") for idx in range(len(self.raw_datas))]
-        else:
-            self.raw_sys = [dpdata.LabeledSystem(self.raw_datas[idx], fmt='abacus/'+self.get_mode(idx)) for idx in range(len(self.raw_datas))]
+        self.raw_sys = []
+        for idx in range(len(self.raw_datas)):
+            mode = self.get_mode(idx)
+            if mode in ['nscf', "scf"]:
+                system = dpdata.System(
+                    read(os.path.join(self._get_output_dir(idx), "STRU.cif")),
+                    fmt="ase/structure",
+                )
+            elif mode.lower() == "get_s":
+                stru_path = os.path.join(self.raw_datas[idx], "STRU")
+                if not os.path.isfile(stru_path):
+                    raise FileNotFoundError(
+                        f"No ABACUS STRU file found for get_S calculation: {stru_path}"
+                    )
+                system = dpdata.System(stru_path, fmt="abacus/stru")
+            else:
+                system = dpdata.LabeledSystem(
+                    self.raw_datas[idx], fmt='abacus/' + mode
+                )
+            self.raw_sys.append(system)
 
     def _get_output_dir(self, idx):
         """
@@ -270,6 +285,18 @@ class AbacusParser(Parser):
     # essential
     def get_blocks(self, idx, hamiltonian=True, overlap=False, density_matrix=False):
         mode = self.get_mode(idx)
+        is_get_s = mode.lower() == "get_s"
+        if is_get_s and (hamiltonian or density_matrix):
+            requested = []
+            if hamiltonian:
+                requested.append("Hamiltonian")
+            if density_matrix:
+                requested.append("density matrix")
+            raise ValueError(
+                "ABACUS get_S calculations only provide the overlap matrix; "
+                f"cannot extract {' and '.join(requested)}."
+            )
+
         logfile = "running_"+mode+".log"
         hamiltonian_dict, overlap_dict, density_matrix_dict = None, None, None
         sys = self.raw_sys[idx]
@@ -337,7 +364,7 @@ class AbacusParser(Parser):
                 else:
                     raise ValueError(f'{line} is not supported')
 
-        if mode in ["scf", "nscf"]:
+        if mode in ["scf", "nscf"] or is_get_s:
             if hamiltonian:
                 hamiltonian_dict, tmp = self.parse_matrix(
                     matrix_path=self._resolve_matrix_path(output_dir, "data-HR-sparse_SPIN0.csr", "hrs1_nao.csr"), 
@@ -352,8 +379,13 @@ class AbacusParser(Parser):
                 hamiltonian_dict = [hamiltonian_dict]
             
             if overlap:
+                overlap_candidates = (
+                    ("SR.csr", "data-SR-sparse_SPIN0.csr", "srs1_nao.csr")
+                    if is_get_s
+                    else ("data-SR-sparse_SPIN0.csr", "srs1_nao.csr")
+                )
                 overlap_dict, tmp = self.parse_matrix(
-                    matrix_path=self._resolve_matrix_path(output_dir, "data-SR-sparse_SPIN0.csr", "srs1_nao.csr"), 
+                    matrix_path=self._resolve_matrix_path(output_dir, *overlap_candidates),
                     nsites=nsites,
                     site_norbits=site_norbits,
                     orbital_types_dict=orbital_types_dict,

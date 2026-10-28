@@ -1,5 +1,6 @@
 import os
 import glob
+import json
 
 from abc import ABC, abstractmethod
 import numpy as np
@@ -242,6 +243,34 @@ class Parser(ABC):
         else:
             raise NotImplementedError(f"Format: {fmt} is not implemented!")
 
+    def write_info(self, out_dir, structure, fmt='dat', eigstatus=None):
+        """Write metadata describing the exported structure and eigenvalues.
+
+        Eigenvalues have already been sliced by ``band_index_min`` in each
+        parser before they reach this method.  Consequently, the exported
+        array has its own zero-based band indices and ``band_max`` is the
+        exclusive upper bound used by DeePTB.
+        """
+        positions = structure[_keys.POSITIONS_KEY]
+        atomic_numbers = structure[_keys.ATOMIC_NUMBERS_KEY]
+        pbc = structure[_keys.PBC_KEY]
+        info = {
+            "nframes": int(positions.shape[0]),
+            "natoms": int(atomic_numbers.shape[0]),
+            "pos_type": "ase" if fmt == "ase" else "cart",
+            "pbc": np.asarray(pbc, dtype=bool).tolist(),
+        }
+        if eigstatus is not None:
+            eigenvalues = eigstatus[_keys.ENERGY_EIGENVALUE_KEY]
+            info["bandinfo"] = {
+                "band_min": 0,
+                "band_max": int(eigenvalues.shape[-1]),
+            }
+
+        with open(os.path.join(out_dir, "info.json"), "w") as f:
+            json.dump(info, f, indent=4)
+            f.write("\n")
+
     def write_dat(self, idx, outroot, fmt='dat', eigenvalue=False, hamiltonian=False, overlap=False, density_matrix=False, band_index_min=0, energy=False):
         # write structure
         os.makedirs(outroot, exist_ok=True)
@@ -316,6 +345,13 @@ class Parser(ABC):
                             default_group.create_dataset(key_str, data=value)
 
             del dm
+
+        self.write_info(
+            out_dir,
+            structure,
+            fmt=fmt,
+            eigstatus=eigstatus if eigenvalue else None,
+        )
 
         return True
     
@@ -397,3 +433,9 @@ class Parser(ABC):
                 txn.put(entries.to_bytes(length=4, byteorder='big'), data_dict)
 
         lmdb_env.close()
+        self.write_info(
+            out_dir,
+            structure,
+            fmt="lmdb",
+            eigstatus=eigstatus if eigenvalue else None,
+        )
