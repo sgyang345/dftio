@@ -59,6 +59,7 @@ Current:
 | Gaussian |     √     |             | √           | √              | √              |              |
 |   VASP   |     √     |      √      |             |                |                | √            |
 |  PYATB   |     √     |      √      |             |                |                |              |
+|  OpenMX  |     √     |      √      | √           | √              | √              |              |
 
 Ongoing:
 
@@ -81,7 +82,7 @@ options:
                         set verbosity level by string or number, 0=ERROR, 1=WARNING, 2=INFO and 3=DEBUG (default: INFO)
   -lp LOG_PATH, --log-path LOG_PATH
                         set log file to log messages to disk, if not specified, the logs will only be output to console (default: None)
-  -m MODE, --mode MODE  The name of the DFT software, currently support abacus/rescu/siesta/gaussian/pyatb (default: abacus)
+  -m MODE, --mode MODE  The name of the DFT software, currently support abacus/rescu/siesta/gaussian/pyatb/openmx (default: abacus)
   -n NUM_WORKERS, --num_workers NUM_WORKERS
                         The number of workers used to parse the dataset. (For n>1, we use the multiprocessing to accelerate io.) (default: 1)
   -r ROOT, --root ROOT  The root directory of the DFT files. (default: ./)
@@ -100,6 +101,25 @@ options:
                         The initial band index for eigenvalues to save.(0-band_index_min) bands will be ignored! (default: 0)
   -energy, --energy     Whether to parse the total energy from DFT output (default: False)
 ```
+
+### OpenMX
+
+For a static OpenMX calculation (`MD.Type Nomd`), dftio can read the structure, eigenvalues, Hamiltonian, overlap matrix, and density matrix. The calculation directory should contain an OpenMX `.out` file, the corresponding `.scfout` file, and a `.cif` structure file. dftio uses the CIF to initialize the structure and restores the final geometry from `.scfout` when parsing. Eigenvalues are read from the SCF output, or from the `.Band` file when band-dispersion output is enabled.
+
+For example, to extract the Hamiltonian and overlap matrices:
+
+```bash
+dftio parse \
+  --mode openmx \
+  --root /path/to/openmx/calculations \
+  --prefix calculation \
+  --hamiltonian \
+  --overlap \
+  --format dat \
+  --outroot ./parsed_openmx
+```
+
+Add `--eigenvalue` to extract eigenvalues and k-points, or `--density_matrix` to extract the density matrix. The parser currently does not extract OpenMX total energies; matrix parsing for MD trajectories is not supported.
 
 ## Call for Contributors
 dftio is an open-source tool that calls for enthusiastic developers to contribute their talent. One can contribute through raising function requirement issues, or contact the current developer directly.
