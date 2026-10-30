@@ -7,6 +7,8 @@ The `dftio parse` command can save the processed data in several formats, contro
 This is the default format (`-f dat`). It saves the parsed data into a well-organized directory structure, making it easy to inspect and use with simple scripts.
 
 A new directory is created for each parsed calculation, named `{formula}.{index}` (e.g., `Si2.0`).
+Use `--output-prefix PREFIX` (or `-op PREFIX`) to replace the formula part, for
+example `--output-prefix training` creates `training.0`, `training.1`, and so on.
 
 - **Structure Data:** Saved as plain text files.
   - `cell.dat`: Lattice vectors for each frame.
@@ -41,6 +43,7 @@ This format (`-f lmdb`) is designed for high-performance applications where quic
 
 - **Database File:**
   - A single file named `data.{pid}.lmdb` is created, where `{pid}` is the process ID.
+  - With `--output-prefix PREFIX`, it is named `{PREFIX}.{pid}.lmdb` instead.
 
 - **Structure:**
   - The database contains key-value pairs. Each value is a [pickled](https://docs.python.org/3/library/pickle.html) Python dictionary that represents a single frame of the calculation.

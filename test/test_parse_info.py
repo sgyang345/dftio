@@ -95,6 +95,55 @@ def test_lmdb_output_writes_info_json(parser, tmp_path):
     env.close()
 
 
+@pytest.mark.parametrize("fmt", ["dat", "ase"])
+def test_structure_output_accepts_custom_prefix(parser, tmp_path, fmt):
+    parser.write(
+        idx=3,
+        outroot=tmp_path,
+        format=fmt,
+        eigenvalue=False,
+        hamiltonian=False,
+        overlap=False,
+        density_matrix=False,
+        band_index_min=0,
+        output_prefix="training_set",
+    )
+
+    assert (tmp_path / "training_set.3" / "info.json").is_file()
+
+
+def test_lmdb_output_accepts_custom_prefix(parser, tmp_path):
+    parser.write(
+        idx=0,
+        outroot=tmp_path,
+        format="lmdb",
+        eigenvalue=False,
+        hamiltonian=False,
+        overlap=False,
+        density_matrix=False,
+        band_index_min=0,
+        output_prefix="training_set",
+    )
+
+    assert (tmp_path / f"training_set.{os.getpid()}.lmdb" / "info.json").is_file()
+
+
+@pytest.mark.parametrize("output_prefix", ["", ".", "..", "nested/name", "nested\\name"])
+def test_output_prefix_rejects_path_components(parser, tmp_path, output_prefix):
+    with pytest.raises(ValueError, match="output_prefix"):
+        parser.write(
+            idx=0,
+            outroot=tmp_path,
+            format="dat",
+            eigenvalue=False,
+            hamiltonian=False,
+            overlap=False,
+            density_matrix=False,
+            band_index_min=0,
+            output_prefix=output_prefix,
+        )
+
+
 def test_info_json_omits_bandinfo_without_eigenvalues(parser, tmp_path):
     parser.write(
         idx=0,

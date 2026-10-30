@@ -17,6 +17,17 @@ import logging
 log = logging.getLogger(__name__)
 
 
+def resolve_output_prefix(output_prefix, default):
+    """Return a safe filename prefix without allowing path components."""
+    if output_prefix is None:
+        return default
+    if not output_prefix or output_prefix in (".", ".."):
+        raise ValueError("output_prefix must be a non-empty filename prefix")
+    if "/" in output_prefix or "\\" in output_prefix:
+        raise ValueError("output_prefix must not contain path separators")
+    return output_prefix
+
+
 def find_target_line(f, target):
     line = f.readline()
     while line:
@@ -212,13 +223,13 @@ class Parser(ABC):
 
         return True
     
-    def write(self, idx, outroot, format, eigenvalue, hamiltonian, overlap, density_matrix, band_index_min, energy=False, **kwargs):
+    def write(self, idx, outroot, format, eigenvalue, hamiltonian, overlap, density_matrix, band_index_min, energy=False, output_prefix=None, **kwargs):
         if format == "hdf5":
             self.write_hdf5(idx=idx, outroot=outroot, eigenvalue=eigenvalue, hamiltonian=hamiltonian, overlap=overlap, density_matrix=density_matrix,band_index_min=band_index_min, energy=energy)
         elif format in ["dat", "ase"]:
-            self.write_dat(idx=idx, outroot=outroot, fmt=format, eigenvalue=eigenvalue, hamiltonian=hamiltonian, overlap=overlap, density_matrix=density_matrix,band_index_min=band_index_min, energy=energy)
+            self.write_dat(idx=idx, outroot=outroot, fmt=format, eigenvalue=eigenvalue, hamiltonian=hamiltonian, overlap=overlap, density_matrix=density_matrix,band_index_min=band_index_min, energy=energy, output_prefix=output_prefix)
         elif format == "lmdb":
-            self.write_lmdb(idx=idx, outroot=outroot, eigenvalue=eigenvalue, hamiltonian=hamiltonian, overlap=overlap, density_matrix=density_matrix,band_index_min=band_index_min, energy=energy)
+            self.write_lmdb(idx=idx, outroot=outroot, eigenvalue=eigenvalue, hamiltonian=hamiltonian, overlap=overlap, density_matrix=density_matrix,band_index_min=band_index_min, energy=energy, output_prefix=output_prefix)
         else:
             raise NotImplementedError(f"Format: {format} is not implemented!")
         
@@ -273,13 +284,14 @@ class Parser(ABC):
             json.dump(info, f, indent=4)
             f.write("\n")
 
-    def write_dat(self, idx, outroot, fmt='dat', eigenvalue=False, hamiltonian=False, overlap=False, density_matrix=False, band_index_min=0, energy=False):
+    def write_dat(self, idx, outroot, fmt='dat', eigenvalue=False, hamiltonian=False, overlap=False, density_matrix=False, band_index_min=0, energy=False, output_prefix=None):
         # write structure
         os.makedirs(outroot, exist_ok=True)
 
         structure = self.get_structure(idx)
 
-        out_dir = os.path.join(outroot, self.formula(idx=idx)+".{}".format(idx))
+        output_prefix = resolve_output_prefix(output_prefix, self.formula(idx=idx))
+        out_dir = os.path.join(outroot, f"{output_prefix}.{idx}")
         os.makedirs(out_dir, exist_ok=True)
         # The abacus must have PBC, so here we save cell by default
         # np.savetxt(os.path.join(out_dir, "cell.dat"), structure[_keys.CELL_KEY].reshape(-1, 3))
@@ -357,9 +369,10 @@ class Parser(ABC):
 
         return True
     
-    def write_lmdb(self, idx, outroot, eigenvalue: bool=False, hamiltonian: bool=False, overlap: bool=False, density_matrix: bool=False,band_index_min=0, energy: bool=False):
+    def write_lmdb(self, idx, outroot, eigenvalue: bool=False, hamiltonian: bool=False, overlap: bool=False, density_matrix: bool=False,band_index_min=0, energy: bool=False, output_prefix=None):
         os.makedirs(outroot, exist_ok=True)
-        out_dir = os.path.join(outroot, "data.{}.lmdb".format(os.getpid()))
+        output_prefix = resolve_output_prefix(output_prefix, "data")
+        out_dir = os.path.join(outroot, f"{output_prefix}.{os.getpid()}.lmdb")
         structure = self.get_structure(idx)
         if any([hamiltonian, overlap, density_matrix]):
             ham, ovp, dm = self.get_blocks(idx, hamiltonian, overlap, density_matrix)

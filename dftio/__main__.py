@@ -113,6 +113,17 @@ def main_parser() -> argparse.ArgumentParser:
     )
 
     parser_parse.add_argument(
+        "-op",
+        "--output-prefix",
+        type=str,
+        default=None,
+        help=(
+            "The prefix for generated dataset names. By default, dat/ase uses "
+            "the chemical formula and lmdb uses 'data'."
+        ),
+    )
+
+    parser_parse.add_argument(
         "-f",
         "--format",
         type=str,
