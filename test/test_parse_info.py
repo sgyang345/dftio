@@ -53,7 +53,12 @@ def test_structure_output_writes_info_json(parser, tmp_path, fmt, pos_type):
         "natoms": 2,
         "pos_type": pos_type,
         "pbc": [True, True, False],
-        "bandinfo": {"band_min": 0, "band_max": 6},
+        "bandinfo": {
+            "band_min": 0,
+            "band_max": 6,
+            "emin": None,
+            "emax": None,
+        },
     }
 
 
@@ -76,7 +81,12 @@ def test_lmdb_output_writes_info_json(parser, tmp_path):
         "natoms": 2,
         "pos_type": "cart",
         "pbc": [True, True, False],
-        "bandinfo": {"band_min": 0, "band_max": 6},
+        "bandinfo": {
+            "band_min": 0,
+            "band_max": 6,
+            "emin": None,
+            "emax": None,
+        },
     }
 
     env = lmdb.open(str(lmdb_dir), readonly=True, lock=False)

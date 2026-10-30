@@ -77,6 +77,19 @@ class BandPlot(object):
             bmax = min(bmax, nbands)
         assert bmax>bmin, "max should be larger than min!"
 
+        kpoint_indices = np.arange(self.kpoints.shape[0], dtype=np.int64)
+        plotted_eigenvalues = self.eigs[:, bmin:bmax]
+        data = np.column_stack((kpoint_indices, plotted_eigenvalues))
+        band_columns = " ".join(
+            f"band_{band_index}" for band_index in range(bmin, bmax)
+        )
+        np.savetxt(
+            os.path.join(self.path, "band_structure.dat"),
+            data,
+            fmt="%.10g",
+            header=f"kpoint_index {band_columns}",
+        )
+
         if self.kpoints.shape[0] > 1:
             ax.plot(self.eigs[:,bmin:bmax], 'b-', lw=1)
             ax.set_xlabel("k-point")

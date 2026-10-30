@@ -265,6 +265,8 @@ class Parser(ABC):
             info["bandinfo"] = {
                 "band_min": 0,
                 "band_max": int(eigenvalues.shape[-1]),
+                "emin": None,
+                "emax": None,
             }
 
         with open(os.path.join(out_dir, "info.json"), "w") as f:
