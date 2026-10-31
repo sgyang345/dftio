@@ -30,11 +30,11 @@ class AbacusParser(Parser):
             **kwargs
             ):
         super(AbacusParser, self).__init__(root, prefix)
-        self.raw_sys = []
-        for idx in range(len(self.raw_datas)):
+
+        def load_system(idx):
             mode = self.get_mode(idx)
             if mode in ['nscf', "scf"]:
-                system = dpdata.System(
+                return dpdata.System(
                     read(os.path.join(self._get_output_dir(idx), "STRU.cif")),
                     fmt="ase/structure",
                 )
@@ -44,12 +44,13 @@ class AbacusParser(Parser):
                     raise FileNotFoundError(
                         f"No ABACUS STRU file found for get_S calculation: {stru_path}"
                     )
-                system = dpdata.System(stru_path, fmt="abacus/stru")
+                return dpdata.System(stru_path, fmt="abacus/stru")
             else:
-                system = dpdata.LabeledSystem(
+                return dpdata.LabeledSystem(
                     self.raw_datas[idx], fmt='abacus/' + mode
                 )
-            self.raw_sys.append(system)
+
+        self.raw_sys = self._load_valid_inputs(load_system)
 
     def _get_output_dir(self, idx):
         """

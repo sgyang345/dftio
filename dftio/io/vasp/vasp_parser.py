@@ -24,7 +24,9 @@ class VASPParser(Parser):
             ):
         super(VASPParser, self).__init__(root, prefix)
 
-        self.raw_sys = [read(self.raw_datas[idx]+'/POSCAR') for idx in range(len(self.raw_datas))]
+        self.raw_sys = self._load_valid_inputs(
+            lambda idx: read(self.raw_datas[idx] + '/POSCAR')
+        )
         log.warning("VASP parser only supports the static (SCF or NSCF) calculations. MD and RELAX is not supported yet.")
     
     # essential

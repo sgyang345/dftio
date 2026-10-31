@@ -23,16 +23,23 @@ class OpenmxParser(Parser):
         super(OpenmxParser, self).__init__(root, prefix)
         self._cache_idx = -1
         self._cache_data = None
-        mode = self.get_mode(idx=0)
-        if mode in ['Nomd']:
-            self.raw_sys = [
-                dpdata.System(self._read_cif_without_spacegroup_warning(f), fmt="ase/structure")
-                for idx in range(len(self.raw_datas))
-                for f in glob.glob(os.path.join(self.raw_datas[idx], "*.cif"))
-            ]
-            # self.raw_sys = [dpdata.System(read(os.path.join(self.raw_datas[idx], "openmx.cif")), fmt="ase/structure") for idx in range(len(self.raw_datas))]
-        elif mode in ['md']:
-            self.raw_sys = [dpdata.LabeledSystem(os.path.join(self.raw_datas[idx], "openmx"), fmt='openmx/md') for idx in range(len(self.raw_datas))]
+
+        def load_system(idx):
+            mode = self.get_mode(idx)
+            if mode == 'Nomd':
+                cif_files = glob.glob(os.path.join(self.raw_datas[idx], "*.cif"))
+                if not cif_files:
+                    raise FileNotFoundError("OpenMX CIF file not found")
+                return dpdata.System(
+                    self._read_cif_without_spacegroup_warning(cif_files[0]),
+                    fmt="ase/structure",
+                )
+            return dpdata.LabeledSystem(
+                os.path.join(self.raw_datas[idx], "openmx"),
+                fmt='openmx/md',
+            )
+
+        self.raw_sys = self._load_valid_inputs(load_system)
 
     def _read_cif_without_spacegroup_warning(self, path):
         with warnings.catch_warnings():

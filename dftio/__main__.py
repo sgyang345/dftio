@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 from pathlib import Path
 from typing import Dict, List, Optional
 from dftio import __version__
@@ -8,6 +9,8 @@ from tqdm import tqdm
 from multiprocessing.pool import Pool
 from dftio.logger import set_log_handles
 from dftio.plot.plot_eigs import BandPlot
+
+log = logging.getLogger(__name__)
 
 def get_ll(log_level: str) -> int:
     """Convert string to python logging level.
@@ -233,16 +236,31 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     return parsed_args
 
 class wapper:
-    def __init__(self, args):
+    def __init__(self, args, parser=None):
         self.args = args
-        self.parser = ParserRegister(
-            **self.args
-        )
+        self.parser = parser if parser is not None else ParserRegister(**self.args)
         
     def __call__(self, idx):
-        # print(idx)
-        self.parser.write(idx=idx, **self.args)
-        return True
+        folder = os.path.basename(os.path.normpath(self.parser[idx]))
+        try:
+            self.parser.write(idx=idx, **self.args)
+        except Exception:
+            return False, folder
+        return True, folder
+
+
+def report_parse_results(parser, results):
+    failed = list(parser.failed_inputs)
+    failed.extend(folder for success, folder in results if not success)
+    succeeded = sum(success for success, _ in results)
+    for folder in failed:
+        log.error("Failed input: %s", folder)
+    log.info(
+        "Parsing summary: total=%d, succeeded=%d, failed=%d",
+        succeeded + len(failed),
+        succeeded,
+        len(failed),
+    )
 
 def main():
     args = parse_args()
@@ -256,13 +274,14 @@ def main():
         parser = ParserRegister(
                         **dict_args
                     )
+        worker = wapper(dict_args, parser=parser)
         
         if args.num_workers > 1:
             with Pool(args.num_workers) as p:
-                list(tqdm(p.imap(wapper(dict_args), range(len(parser))), total=len(parser), desc="Parsing the DFT files: "))
+                results = list(tqdm(p.imap(worker, range(len(parser))), total=len(parser), desc="Parsing the DFT files: "))
         else:
-            for i in tqdm(range(len(parser)), desc="Parsing the DFT files: "):
-                parser.write(idx=i, **dict_args)
+            results = [worker(i) for i in tqdm(range(len(parser)), desc="Parsing the DFT files: ")]
+        report_parse_results(parser, results)
         
     if args.command == "band":
         bandplot = BandPlot(

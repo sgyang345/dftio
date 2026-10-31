@@ -39,9 +39,12 @@ class PyatbParser(Parser):
             **kwargs
             ):
         super(PyatbParser, self).__init__(root, prefix)
-        self.raw_sys = [
-            dpdata.System(os.path.join(self.raw_datas[idx], 'pyatb', "STRU"), fmt="abacus/stru") for
-            idx in range(len(self.raw_datas))]
+        self.raw_sys = self._load_valid_inputs(
+            lambda idx: dpdata.System(
+                os.path.join(self.raw_datas[idx], 'pyatb', "STRU"),
+                fmt="abacus/stru",
+            )
+        )
 
     # essential
     def get_structure(self, idx):

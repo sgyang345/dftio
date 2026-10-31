@@ -69,6 +69,7 @@ class Parser(ABC):
 
         self.root = root
         self.prefix = prefix
+        self.failed_inputs = []
         if '/' in prefix:
             log.warning(f"There are '/' in the prefix: {prefix}, which should not appear. You should consider use '-r' "
                         f"to change the root rather than include path in the prefix, which might cause error.")
@@ -79,6 +80,21 @@ class Parser(ABC):
             self.raw_datas = glob.glob(os.path.join(root, '*' + prefix + '*'))
 
         assert(len(self.raw_datas) != 0, 'There are no folders that meet the requirements in the directory!')
+
+    def _load_valid_inputs(self, loader):
+        """Load inputs eagerly while excluding individual failures."""
+        valid_raw_datas = []
+        loaded_inputs = []
+        for idx, raw_data in enumerate(self.raw_datas):
+            try:
+                loaded_input = loader(idx)
+            except Exception:
+                self.failed_inputs.append(os.path.basename(os.path.normpath(raw_data)))
+                continue
+            valid_raw_datas.append(raw_data)
+            loaded_inputs.append(loaded_input)
+        self.raw_datas = valid_raw_datas
+        return loaded_inputs
     
     def __len__(self):
         return len(self.raw_datas)
