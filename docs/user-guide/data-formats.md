@@ -44,6 +44,8 @@ This format (`-f lmdb`) is designed for high-performance applications where quic
 - **Database File:**
   - A single file named `data.{pid}.lmdb` is created, where `{pid}` is the process ID.
   - With `--output-prefix PREFIX`, it is named `{PREFIX}.{pid}.lmdb` instead.
+  - LMDB output does not create `info.json`; readers determine the number of
+    frames from the number of entries stored in the database.
 
 - **Structure:**
   - The database contains key-value pairs. Each value is a [pickled](https://docs.python.org/3/library/pickle.html) Python dictionary that represents a single frame of the calculation.

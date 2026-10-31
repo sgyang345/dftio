@@ -62,7 +62,7 @@ def test_structure_output_writes_info_json(parser, tmp_path, fmt, pos_type):
     }
 
 
-def test_lmdb_output_writes_info_json(parser, tmp_path):
+def test_lmdb_output_does_not_write_info_json(parser, tmp_path):
     parser.write(
         idx=0,
         outroot=tmp_path,
@@ -75,19 +75,7 @@ def test_lmdb_output_writes_info_json(parser, tmp_path):
     )
 
     lmdb_dir = tmp_path / f"data.{os.getpid()}.lmdb"
-    info = json.loads((lmdb_dir / "info.json").read_text())
-    assert info == {
-        "nframes": 2,
-        "natoms": 2,
-        "pos_type": "cart",
-        "pbc": [True, True, False],
-        "bandinfo": {
-            "band_min": 0,
-            "band_max": 6,
-            "emin": None,
-            "emax": None,
-        },
-    }
+    assert not (lmdb_dir / "info.json").exists()
 
     env = lmdb.open(str(lmdb_dir), readonly=True, lock=False)
     with env.begin() as txn:
@@ -125,7 +113,9 @@ def test_lmdb_output_accepts_custom_prefix(parser, tmp_path):
         output_prefix="training_set",
     )
 
-    assert (tmp_path / f"training_set.{os.getpid()}.lmdb" / "info.json").is_file()
+    lmdb_dir = tmp_path / f"training_set.{os.getpid()}.lmdb"
+    assert (lmdb_dir / "data.mdb").is_file()
+    assert not (lmdb_dir / "info.json").exists()
 
 
 @pytest.mark.parametrize("output_prefix", ["", ".", "..", "nested/name", "nested\\name"])

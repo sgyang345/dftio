@@ -464,9 +464,3 @@ class Parser(ABC):
                 txn.put(entries.to_bytes(length=4, byteorder='big'), data_dict)
 
         lmdb_env.close()
-        self.write_info(
-            out_dir,
-            structure,
-            fmt="lmdb",
-            eigstatus=eigstatus if eigenvalue else None,
-        )
