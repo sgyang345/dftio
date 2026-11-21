@@ -22,7 +22,7 @@ class SiestaParser(Parser):
             prefix,
             **kwargs
             ):
-        super(SiestaParser, self).__init__(root, prefix)
+        super(SiestaParser, self).__init__(root, prefix, **kwargs)
     
     @staticmethod
     def convert_kpoints_bohr_inv_to_twopi_over_a(kpoints_bohr_inv, lattice_const_a_angstrom):
@@ -126,7 +126,7 @@ class SiestaParser(Parser):
                 counter_start_end.append(i)
         assert len(counter_start_end) == 2, "LatticeVectors section not found or malformed."
         # Extract lattice vectors
-        lattice_vec = np.array([lines[i].split()[0:3] for i in range(counter_start_end[0]+1, counter_start_end[1])], dtype=np.float32)
+        lattice_vec = np.array([lines[i].split()[0:3] for i in range(counter_start_end[0]+1, counter_start_end[1])], dtype=self.real_dtype)
 
         with open(struct, 'r') as file:
             lines = file.readlines()
@@ -134,7 +134,7 @@ class SiestaParser(Parser):
         for i in range(len(lines)):
             if 'AtomicCoordinatesAndAtomicSpecies' in lines[i].split():
                 counter_start_end.append(i)
-        struct_xyz = np.array([lines[i].split()[0:3] for i in range(counter_start_end[0]+1, counter_start_end[1])], dtype=np.float32)
+        struct_xyz = np.array([lines[i].split()[0:3] for i in range(counter_start_end[0]+1, counter_start_end[1])], dtype=self.real_dtype)
         element_type = [lines[i].split()[3] for i in range(counter_start_end[0]+1, counter_start_end[1])]
 
         with open(chemspecis, 'r') as file:
@@ -154,8 +154,8 @@ class SiestaParser(Parser):
             _keys.ATOMIC_NUMBERS_KEY: np.array(element_index_all, dtype=np.int32),
             _keys.PBC_KEY: np.array([True, True, True]) # abacus does not allow non-pbc structure
         }
-        structure[_keys.POSITIONS_KEY] = struct_xyz.astype(np.float32)[np.newaxis, :, :]
-        structure[_keys.CELL_KEY] = lattice_vec.astype(np.float32)[np.newaxis, :, :]
+        structure[_keys.POSITIONS_KEY] = struct_xyz.astype(self.real_dtype)[np.newaxis, :, :]
+        structure[_keys.CELL_KEY] = lattice_vec.astype(self.real_dtype)[np.newaxis, :, :]
 
         return structure
     
@@ -171,8 +171,8 @@ class SiestaParser(Parser):
             band_index_min (int, optional): Minimum band index to include in the output. Defaults to 0.
         Returns:
             dict: A dictionary containing:
-                - _keys.ENERGY_EIGENVALUE_KEY (np.ndarray): Eigenvalues of shape (1, num_kpts, num_bands), dtype float32.
-                - _keys.KPOINT_KEY (np.ndarray): K-point coordinates of shape (num_kpts, 3), dtype float32.
+                - _keys.ENERGY_EIGENVALUE_KEY (np.ndarray): Eigenvalues of shape (1, num_kpts, num_bands), with the requested precision.
+                - _keys.KPOINT_KEY (np.ndarray): K-point coordinates of shape (num_kpts, 3), with the requested precision.
         """
         
         # Check if WriteKbands is set to true in the SIESTA input file
@@ -227,7 +227,7 @@ class SiestaParser(Parser):
         for i in range(len(lines)):
             if 'LatticeVectors' in lines[i].split():
                 counter_start_end.append(i)
-        lattice_vec = np.array([lines[i].split()[0:3] for i in range(counter_start_end[0]+1, counter_start_end[1])], dtype=np.float32)
+        lattice_vec = np.array([lines[i].split()[0:3] for i in range(counter_start_end[0]+1, counter_start_end[1])], dtype=self.real_dtype)
         kpts = SiestaParser.convert_kpoints_bohr_inv_to_twopi_over_a(kpts, lattice_vec) # in units of 2π/a
         
 
@@ -278,7 +278,7 @@ class SiestaParser(Parser):
         assert eigs.shape[1] == len(kpts), \
             f"Number of kpoints for eigenvalues ({eigs.shape[1]}) does not match the number of k-points in Kline ({len(kpts)})." 
     
-        return {_keys.ENERGY_EIGENVALUE_KEY: eigs.astype(np.float32), _keys.KPOINT_KEY: kpts.astype(np.float32)}
+        return {_keys.ENERGY_EIGENVALUE_KEY: eigs.astype(self.real_dtype), _keys.KPOINT_KEY: kpts.astype(self.real_dtype)}
 
 
     # essential
@@ -424,7 +424,7 @@ class SiestaParser(Parser):
 
             hamil_mask = np.array(hamil_mask)
             hamil_Rvec = Rvec[hamil_mask]
-            hamil_blocks = np.stack(hamil_blocks).astype(np.float32)
+            hamil_blocks = np.stack(hamil_blocks).astype(self.real_dtype)
 
             for i in range(na):
                 si = element[i]
@@ -463,7 +463,7 @@ class SiestaParser(Parser):
                 else:
                     ovp_mask.append(False)
                 
-            ovp_blocks = np.stack(ovp_blocks).astype(np.float32)
+            ovp_blocks = np.stack(ovp_blocks).astype(self.real_dtype)
             ovp_mask = np.array(ovp_mask)
             ovp_Rvec = Rvec[ovp_mask]
 
@@ -510,7 +510,7 @@ class SiestaParser(Parser):
                 else:
                     DM_mask.append(False)
                 
-            DM_blocks = np.stack(DM_blocks).astype(np.float32)
+            DM_blocks = np.stack(DM_blocks).astype(self.real_dtype)
             DM_mask = np.array(DM_mask)
             DM_Rvec = Rvec[DM_mask]
 

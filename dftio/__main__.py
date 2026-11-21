@@ -84,6 +84,13 @@ def main_parser() -> argparse.ArgumentParser:
     )
 
     parser_parse.add_argument(
+        "--precision",
+        choices=["single", "double"],
+        default="single",
+        help="Numeric reading precision; single preserves the original parser defaults.",
+    )
+
+    parser_parse.add_argument(
         "-n",
         "--num_workers",
         type=int,

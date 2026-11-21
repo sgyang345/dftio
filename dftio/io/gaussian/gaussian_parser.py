@@ -13,7 +13,7 @@ from dftio.io.gaussian.gaussian_conventions import orbital_sign_map
 @ParserRegister.register("gaussian")
 class GaussianParser(Parser):
     def __init__(self, root, prefix, convention_file=None, valid_gau_info_path=None, add_phase_transfer=False, **kwargs):
-        super(GaussianParser, self).__init__(root, prefix)
+        super(GaussianParser, self).__init__(root, prefix, **kwargs)
         self.add_phase_transfer = add_phase_transfer
         self.is_fixed_convention = False
         self.on_the_fly_convention_done = False
@@ -38,8 +38,8 @@ class GaussianParser(Parser):
         structure = {
             _keys.ATOMIC_NUMBERS_KEY: atoms.numbers,
             _keys.PBC_KEY: np.array([False, False, False]),
-            _keys.POSITIONS_KEY: atoms.positions.reshape(1, -1, 3).astype(np.float32),
-            _keys.CELL_KEY: atoms.cell.reshape(1,3,3).astype(np.float32)
+            _keys.POSITIONS_KEY: atoms.positions.reshape(1, -1, 3).astype(self.real_dtype),
+            _keys.CELL_KEY: atoms.cell.reshape(1,3,3).astype(self.real_dtype)
         }
         return structure
 

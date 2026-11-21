@@ -27,9 +27,10 @@ class AbacusParser(Parser):
             self,
             root,
             prefix,
+            precision="single",
             **kwargs
             ):
-        super(AbacusParser, self).__init__(root, prefix)
+        super(AbacusParser, self).__init__(root, prefix, precision=precision)
 
         def load_system(idx):
             mode = self.get_mode(idx)
@@ -135,8 +136,8 @@ class AbacusParser(Parser):
             _keys.ATOMIC_NUMBERS_KEY: np.array([ase.atom.atomic_numbers[i] for i in sys.data["atom_names"]], dtype=np.int32)[sys.data["atom_types"]],
             _keys.PBC_KEY: np.array([True, True, True]) # abacus does not allow non-pbc structure
         }
-        structure[_keys.POSITIONS_KEY] = sys.data["coords"].astype(np.float32)
-        structure[_keys.CELL_KEY] = sys.data["cells"].astype(np.float32)
+        structure[_keys.POSITIONS_KEY] = sys.data["coords"].astype(self.real_dtype)
+        structure[_keys.CELL_KEY] = sys.data["cells"].astype(self.real_dtype)
 
         return structure
     
@@ -244,7 +245,7 @@ class AbacusParser(Parser):
         else:
             raise NotImplementedError("mode {} is not supported.".format(mode))
             
-        return {_keys.ENERGY_EIGENVALUE_KEY: eigs.astype(np.float32), _keys.KPOINT_KEY: kpts.astype(np.float32)}
+        return {_keys.ENERGY_EIGENVALUE_KEY: eigs.astype(self.real_dtype), _keys.KPOINT_KEY: kpts.astype(self.real_dtype)}
     
     # essential
     def get_basis(self, idx):
@@ -562,15 +563,15 @@ class AbacusParser(Parser):
                     line3 = self._read_numeric_block(f, num_element)
                     line4 = self._read_numeric_block(f, norbits + 1)
                     if not spinful:
-                        hamiltonian_cur = csr_matrix((np.array(line2).astype(np.float32), np.array(line3).astype(int),
-                                                        np.array(line4).astype(np.int32)), shape=(norbits, norbits), dtype=np.float32).toarray()
+                        hamiltonian_cur = csr_matrix((np.array(line2).astype(self.real_dtype), np.array(line3).astype(int),
+                                                        np.array(line4).astype(np.int32)), shape=(norbits, norbits), dtype=self.real_dtype).toarray()
                     else:
                         line2 = np.char.replace(line2, '(', '')
                         line2 = np.char.replace(line2, ')', 'j')
                         line2 = np.char.replace(line2, ',', '+')
                         line2 = np.char.replace(line2, '+-', '-')
-                        hamiltonian_cur = csr_matrix((np.array(line2).astype(np.complex64), np.array(line3).astype(int),
-                                                    np.array(line4).astype(np.int32)), shape=(norbits, norbits), dtype=np.complex64).toarray()
+                        hamiltonian_cur = csr_matrix((np.array(line2).astype(self.complex_dtype), np.array(line3).astype(int),
+                                                    np.array(line4).astype(np.int32)), shape=(norbits, norbits), dtype=self.complex_dtype).toarray()
                     for index_site_i in range(nsites):
                         for index_site_j in range(nsites):
                             key_str = f"{index_site_i}_{index_site_j}_{R_cur[0]}_{R_cur[1]}_{R_cur[2]}"

@@ -20,7 +20,7 @@ Bohr2Angstrom = 0.52917721067
 @ParserRegister.register("rescu")
 class RescuParser(Parser):
     def __init__(self, root, prefix, **kwargs):
-        super(RescuParser, self).__init__(root, prefix)
+        super(RescuParser, self).__init__(root, prefix, **kwargs)
         # the root + prefix should locate the directory of the output file of each calculation
         # the list of path will be saved in self.raw_datas
 
@@ -40,7 +40,7 @@ class RescuParser(Parser):
                 break
 
         with h5py.File(path, "r") as f:
-            pos = f["atom"]["xyz"][:].T.astype(np.float32)
+            pos = f["atom"]["xyz"][:].T.astype(self.real_dtype)
             element_map = f["atom"]["element"][:].reshape(-1).astype(np.int32) - 1
 
             if isinstance(f["element"]["species"][:][0][0], np.uint16):
@@ -60,7 +60,7 @@ class RescuParser(Parser):
                     raise ValueError("Unknown boundary condition")
             pbc = np.array(pbc)
 
-            cell = f["domain"]["latvec"][:].T.astype(np.float32)
+            cell = f["domain"]["latvec"][:].T.astype(self.real_dtype)
         
         structure = {
             _keys.ATOMIC_NUMBERS_KEY: atomic_number,
@@ -81,6 +81,9 @@ class RescuParser(Parser):
         with h5py.File(path, "r") as f:
             kpt = f["band"]["kdirect"][:].T[np.newaxis, :, :]
             eigs = f["band"]["ksnrg"][:].T
+        if self.precision == "double":
+            kpt = kpt.astype(self.real_dtype)
+            eigs = eigs.astype(self.real_dtype)
         
         return {_keys.KPOINT_KEY: kpt, _keys.ENERGY_EIGENVALUE_KEY: eigs}
     
@@ -196,7 +199,7 @@ class RescuParser(Parser):
                     else:
                         hamil_mask.append(False)
                 hamil_mask = np.array(hamil_mask)
-                hamil = np.stack(hamil).astype(np.float32) * Hartree2eV
+                hamil = np.stack(hamil).astype(self.real_dtype) * Hartree2eV
                 hamil_Rvec = Rvec[hamil_mask]
                 xcount = 0
                 for i, ai in enumerate(an):
@@ -226,7 +229,7 @@ class RescuParser(Parser):
                     else:
                         ovp_mask.append(False)
                 ovp_mask = np.array(ovp_mask)
-                ovp = np.stack(ovp).astype(np.float32)
+                ovp = np.stack(ovp).astype(self.real_dtype)
                 ovp_Rvec = Rvec[ovp_mask]
                 xcount = 0
                 for i, ai in enumerate(an):

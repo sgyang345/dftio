@@ -20,7 +20,7 @@ class OpenmxParser(Parser):
             prefix,
             **kwargs
             ):
-        super(OpenmxParser, self).__init__(root, prefix)
+        super(OpenmxParser, self).__init__(root, prefix, **kwargs)
         self._cache_idx = -1
         self._cache_data = None
 
@@ -90,8 +90,8 @@ class OpenmxParser(Parser):
         
         # Ensure dimensions are (nframes, ...)
         # Nomd mode -> 1 frame
-        structure[_keys.POSITIONS_KEY] = Gxyz_ang[np.newaxis, :, :].astype(np.float32)
-        structure[_keys.CELL_KEY] = tv_ang[np.newaxis, :, :].astype(np.float32)
+        structure[_keys.POSITIONS_KEY] = Gxyz_ang[np.newaxis, :, :].astype(self.real_dtype)
+        structure[_keys.CELL_KEY] = tv_ang[np.newaxis, :, :].astype(self.real_dtype)
 
         return structure
 
@@ -153,7 +153,7 @@ class OpenmxParser(Parser):
                  eigs_np = eigs_np[0:1]
             kpts_np = np.array(kpts)
             eigs_np = eigs_np[:, :, band_index_min:] * Harte2eV
-            return {_keys.ENERGY_EIGENVALUE_KEY: eigs_np.astype(np.float32), _keys.KPOINT_KEY: kpts_np.astype(np.float32)}
+            return {_keys.ENERGY_EIGENVALUE_KEY: eigs_np.astype(self.real_dtype), _keys.KPOINT_KEY: kpts_np.astype(self.real_dtype)}
 
         elif mode == "md" or mode == "relax":
             raise NotImplementedError("output eigenvalues from MD trajectory is not supported by OpenMX.")
@@ -217,7 +217,7 @@ class OpenmxParser(Parser):
         eigs_np = np.moveaxis(eigs_np, 1, 0)
         eigs_np = eigs_np[:, :, band_index_min:] * Harte2eV
         kpts_np = np.array(kpts)
-        return {_keys.ENERGY_EIGENVALUE_KEY: eigs_np.astype(np.float32), _keys.KPOINT_KEY: kpts_np.astype(np.float32)}
+        return {_keys.ENERGY_EIGENVALUE_KEY: eigs_np.astype(self.real_dtype), _keys.KPOINT_KEY: kpts_np.astype(self.real_dtype)}
 
 
     def get_basis(self, idx):
@@ -308,7 +308,7 @@ class OpenmxParser(Parser):
                     # Mat_real is [[atom][neighbor]] (wrapped)
                     block = Mat_real[0][site_i][index_nn_i]
                     block = self.transform(block, orbital_types[site_i], orbital_types[site_j])
-                    matrices[key] = block.astype(np.float32)
+                    matrices[key] = block.astype(self.real_dtype)
              return matrices
 
         # For Hamiltonian and Density Matrix
@@ -322,7 +322,7 @@ class OpenmxParser(Parser):
 
                     block = Mat_real[0][site_i][index_nn_i]
                     block = self.transform(block, orbital_types[site_i], orbital_types[site_j])
-                    matrices[key] = block.astype(np.float32)
+                    matrices[key] = block.astype(self.real_dtype)
 
         elif SpinP_switch == 3:
             for site_i in range(nsites):

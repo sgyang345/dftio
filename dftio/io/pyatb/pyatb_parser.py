@@ -38,7 +38,7 @@ class PyatbParser(Parser):
             prefix,
             **kwargs
             ):
-        super(PyatbParser, self).__init__(root, prefix)
+        super(PyatbParser, self).__init__(root, prefix, **kwargs)
         self.raw_sys = self._load_valid_inputs(
             lambda idx: dpdata.System(
                 os.path.join(self.raw_datas[idx], 'pyatb', "STRU"),
@@ -54,8 +54,8 @@ class PyatbParser(Parser):
             _keys.ATOMIC_NUMBERS_KEY: np.array([ase.atom.atomic_numbers[i] for i in sys.data["atom_names"]], dtype=np.int32)[sys.data["atom_types"]],
             _keys.PBC_KEY: np.array([True, True, True]) # abacus does not allow non-pbc structure
         }
-        structure[_keys.POSITIONS_KEY] = sys.data["coords"].astype(np.float32)
-        structure[_keys.CELL_KEY] = sys.data["cells"].astype(np.float32)
+        structure[_keys.POSITIONS_KEY] = sys.data["coords"].astype(self.real_dtype)
+        structure[_keys.CELL_KEY] = sys.data["cells"].astype(self.real_dtype)
 
         return structure
     
@@ -68,7 +68,7 @@ class PyatbParser(Parser):
         assert os.path.exists(os.path.join(path, 'pyatb', "Out", "Band_Structure", "kpt.dat"))
         kpts = np.loadtxt(os.path.join(path, 'pyatb', "Out", "Band_Structure", "kpt.dat"))
 
-        return {_keys.ENERGY_EIGENVALUE_KEY: eigs.astype(np.float32), _keys.KPOINT_KEY: kpts.astype(np.float32)}
+        return {_keys.ENERGY_EIGENVALUE_KEY: eigs.astype(self.real_dtype), _keys.KPOINT_KEY: kpts.astype(self.real_dtype)}
     
     # essential
     def get_basis(self, idx):

@@ -22,7 +22,7 @@ class VASPParser(Parser):
             prefix,
             **kwargs
             ):
-        super(VASPParser, self).__init__(root, prefix)
+        super(VASPParser, self).__init__(root, prefix, **kwargs)
 
         self.raw_sys = self._load_valid_inputs(
             lambda idx: read(self.raw_datas[idx] + '/POSCAR')
@@ -44,7 +44,7 @@ class VASPParser(Parser):
         assert os.path.exists(os.path.join(path, "EIGENVAL"))
         kpts, eigs = self.read_EIGENVAL(os.path.join(path, "EIGENVAL"))
         eigs = eigs[:, :, band_index_min:] # [1, nk, nbands]
-        return {_keys.ENERGY_EIGENVALUE_KEY: eigs.astype(np.float32), _keys.KPOINT_KEY: kpts.astype(np.float32)}
+        return {_keys.ENERGY_EIGENVALUE_KEY: eigs.astype(self.real_dtype), _keys.KPOINT_KEY: kpts.astype(self.real_dtype)}
     
     @staticmethod
     def read_EIGENVAL(file):

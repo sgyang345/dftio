@@ -54,6 +54,7 @@ class Parser(ABC):
             self,
             root,
             prefix,
+            precision="single",
             **kwargs
             ):
         """All DFT parser need to inherit this class and implement the abstract methods.
@@ -65,8 +66,16 @@ class Parser(ABC):
         root : The root of the DFT calculation output files
         prefix : str
             The prefix of the DFT calculation folders or files
+        precision : {"single", "double"}
+            Numeric reading precision. The default preserves legacy conversions;
+            arrays already read at higher precision are not downcast.
         """
 
+        if precision not in ("single", "double"):
+            raise ValueError("precision must be 'single' or 'double'")
+        self.precision = precision
+        self.real_dtype = np.float64 if precision == "double" else np.float32
+        self.complex_dtype = np.complex128 if precision == "double" else np.complex64
         self.root = root
         self.prefix = prefix
         self.failed_inputs = []
@@ -149,16 +158,16 @@ class Parser(ABC):
             structure = {
                 _keys.ATOMIC_NUMBERS_KEY: atom_numbs.astype(np.int32),
                 _keys.PBC_KEY: pbc,
-                _keys.POSITIONS_KEY: np.array(pos).astype(np.float32),
-                _keys.CELL_KEY: np.array(cell).astype(np.float32)
+                _keys.POSITIONS_KEY: np.array(pos).astype(self.real_dtype),
+                _keys.CELL_KEY: np.array(cell).astype(self.real_dtype)
             }
 
         elif isinstance(sys, ase.Atoms):
             structure = {
             _keys.ATOMIC_NUMBERS_KEY: sys.get_atomic_numbers().astype(np.int32),
             _keys.PBC_KEY: sys.pbc,
-            _keys.POSITIONS_KEY: sys.positions[np.newaxis,:,:].astype(np.float32),
-            _keys.CELL_KEY: sys.cell[np.newaxis,:,:].astype(np.float32)
+            _keys.POSITIONS_KEY: sys.positions[np.newaxis,:,:].astype(self.real_dtype),
+            _keys.CELL_KEY: sys.cell[np.newaxis,:,:].astype(self.real_dtype)
             }
         else:
             raise ValueError("The input system is not a list or ase.Atoms object!")
@@ -196,8 +205,8 @@ class Parser(ABC):
         
         # check dtype
         assert atomic_number.dtype == np.int32, "The dtype of atomic_number should be int"
-        assert cell.dtype == np.float32, "The dtype of cell should be float"
-        assert pos.dtype == np.float32, "The dtype of pos should be float"
+        assert cell.dtype == self.real_dtype, f"The dtype of cell should be {self.real_dtype.__name__}"
+        assert pos.dtype == self.real_dtype, f"The dtype of pos should be {self.real_dtype.__name__}"
         assert pbc.dtype == np.bool8, "The dtype of pbc should be bool"
 
         return True
@@ -214,8 +223,8 @@ class Parser(ABC):
         assert len(kpts.shape) == 2 and kpts.shape[0] == nk and kpts.shape[1] == 3, "The shape of kpoint should be (n_kpt, 3)"
 
         # check dtype
-        assert eigs.dtype == np.float32, "The dtype of eigenvalue should be float"
-        assert kpts.dtype == np.float32, "The dtype of kpoint should be float"
+        assert eigs.dtype == self.real_dtype, f"The dtype of eigenvalue should be {self.real_dtype.__name__}"
+        assert kpts.dtype == self.real_dtype, f"The dtype of kpoint should be {self.real_dtype.__name__}"
 
         return True
     
@@ -228,7 +237,7 @@ class Parser(ABC):
 
             assert all([isinstance(h, dict) for h in ham]), "Hamiltonian should be a list of dict"
             assert ham[0].get("0_0_0_0_0") is not None, "Hamiltonian should at least have key 0_0_0_0_0"
-            assert ham[0].get("0_0_0_0_0").dtype in [np.float32, np.complex64], "The dtype of hamiltonian block should be float real or complex"
+            assert ham[0].get("0_0_0_0_0").dtype in [self.real_dtype, self.complex_dtype], "The dtype of hamiltonian block should match the requested precision"
 
         if overlap:
             assert ovp is not None, "Overlap should not be None"
@@ -236,6 +245,18 @@ class Parser(ABC):
         if density_matrix:
             assert dm is not None, "Density matrix should not be None"
             assert len(dm) == structure[_keys.POSITIONS_KEY].shape[0], "The number of density matrix blocks should be equal to the number of frames"
+
+        if self.precision == "double":
+            for name, frames, requested in (
+                ("Hamiltonian", ham, hamiltonian),
+                ("Overlap", ovp, overlap),
+                ("Density matrix", dm, density_matrix),
+            ):
+                if requested:
+                    assert all(
+                        block.dtype in [self.real_dtype, self.complex_dtype]
+                        for frame in frames for block in frame.values()
+                    ), f"All {name} blocks should use double precision"
 
         return True
     
